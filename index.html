@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>系统登录</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background: #f5f6fa url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80') no-repeat center center fixed;
+            background-size: cover;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-main {
+            display: flex;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+            overflow: hidden;
+            min-width: 700px;
+            max-width: 900px;
+            min-height: 420px;
+        }
+        .login-illustration {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            width: 340px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #fff;
+        }
+        .login-illustration img {
+            width: 180px;
+            margin-bottom: 18px;
+        }
+        .login-illustration h3 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .login-illustration p {
+            font-size: 1.08rem;
+            opacity: 0.92;
+        }
+        .login-form-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 48px 48px 36px 48px;
+        }
+        .login-form-box h2 {
+            font-size: 2rem;
+            color: #222;
+            font-weight: bold;
+            margin-bottom: 32px;
+            letter-spacing: 2px;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 18px;
+        }
+        .form-row label {
+            width: 68px;
+            min-width: 68px;
+            font-size: 1.08rem;
+            color: #333;
+            font-weight: 500;
+            text-align: left; /* 由right改为left，实现左对齐 */
+            margin-right: 10px;
+        }
+        .form-row .input-row {
+            flex: 1;
+            position: relative;
+        }
+        .form-row input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 10px;
+            border: 1.5px solid #cfd8dc;
+            border-radius: 8px;
+            font-size: 1.13rem;
+            background: #f7fafd;
+            transition: border 0.2s;
+        }
+        .form-row input:focus {
+            border: 1.5px solid #4facfe;
+            outline: none;
+            background: #fff;
+        }
+        #togglePwd {
+            position:absolute;right:10px;top:50%;transform:translateY(-50%);
+            cursor:pointer;font-size:1.2rem;color:#888;user-select:none;
+        }
+        #loginError {
+            color: #dc3545;
+            margin-bottom: 10px;
+            min-height: 22px;
+            font-size: 1.05rem;
+        }
+        #loginLoading {
+            color: #888;
+            margin-bottom: 10px;
+            min-height: 22px;
+            font-size: 0.98rem;
+        }
+        #loginBtn {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.13rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: 0 2px 8px rgba(79,172,254,0.08);
+            letter-spacing: 1px;
+            transition: background 0.2s;
+        }
+        #loginBtn:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+        }
+        @media (max-width: 900px) {
+            .login-main { min-width: 0; width: 98vw; }
+            .login-illustration { display: none; }
+            .login-form-box { padding: 32px 8vw 24px 8vw; }
+        }
+        @media (max-width: 480px) {
+            .login-form-box { padding: 18px 2vw 18px 2vw; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-main">
+        <div class="login-illustration">
+            <img src="https://img.alicdn.com/imgextra/i2/O1CN01QwQw2B1w6Qw1QwQwQ_!!6000000006312-2-tps-400-400.png" alt="illustration" />
+            <h3>欢迎登录</h3>
+            <p>请使用您的账号密码登录系统</p>
+        </div>
+        <div class="login-form-box">
+            <h2>夏盛生产数据可视化分析系统</h2>
+            <div id="loginError"></div>
+            <div id="loginLoading"></div>
+            <form onsubmit="handleLogin();return false;">
+                <div class="form-row">
+                    <label for="loginUser">用户名</label>
+                    <div class="input-row">
+                        <input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username" autocapitalize="off" autocorrect="off" required />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label for="loginPass">密码</label>
+                    <div class="input-row">
+                        <input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password" required style="padding-right:36px;" />
+                        <span id="togglePwd" title="显示/隐藏密码">👁️</span>
+                    </div>
+                </div>
+                <button id="loginBtn" type="submit">登录</button>
+            </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js"></script>
+    <script>
+    function setLoading(msg) {
+        document.getElementById('loginLoading').textContent = msg || '';
+    }
+    function setError(msg) {
+        document.getElementById('loginError').textContent = msg || '';
+    }
+    function setBtnDisabled(disabled) {
+        document.getElementById('loginBtn').disabled = !!disabled;
+    }
+    function handleLogin() {
+        setError('');
+        setLoading('正在验证...');
+        setBtnDisabled(true);
+        var user = document.getElementById('loginUser').value.trim();
+        var pass = document.getElementById('loginPass').value;
+        if (!user || !pass) {
+            setError('请输入用户名和密码');
+            setLoading('');
+            setBtnDisabled(false);
+            return;
+        }
+        // 直接请求后端API
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api1/login', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                setLoading('');
+                setBtnDisabled(false);
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (xhr.status === 200 && data.success) {
+                        setError('');
+                        setLoading('登录成功，正在跳转...');
+                        setBtnDisabled(true);
+                        sessionStorage.setItem('isLogin', '1');
+                        setTimeout(function() {
+                            window.location.href = 'fermentation_data_sheet3.html';
+                        }, 600);
+                    } else {
+                        setError(data.msg || '用户名或密码错误');
+                    }
+                } catch(e) {
+                    setError('服务器响应异常');
+                }
+            }
+        };
+        xhr.onerror = function() {
+            setLoading('');
+            setBtnDisabled(false);
+            setError('无法连接服务器');
+        };
+        xhr.send(JSON.stringify({username: user, password_md5: window.md5(pass)}));
+    }
+    // 密码显示/隐藏功能
+    document.getElementById('togglePwd').onclick = function() {
+        var pwd = document.getElementById('loginPass');
+        if (pwd.type === 'password') {
+            pwd.type = 'text';
+            this.textContent = '🙈';
+        } else {
+            pwd.type = 'password';
+            this.textContent = '👁️';
+        }
+    };
+    // 兼容回车登录
+    document.getElementById('loginPass').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.keyCode === 13) handleLogin();
+    });
+    document.getElementById('loginUser').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.keyCode === 13) handleLogin();
+    });
+    // 自动聚焦
+    document.getElementById('loginUser').focus();
+    </script>
+</body>
+</html>

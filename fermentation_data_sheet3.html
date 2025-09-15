@@ -1,0 +1,1959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <script>
+if (!sessionStorage.getItem('isLogin')) {
+    window.location.href = 'index.html';
+}
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>夏盛生产数据可视化分析系统 - 三级数据</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
+    <!-- 添加SheetJS库用于Excel文件解析 -->
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        // Chart.js和插件多重加载策略
+        window.chartJsLoaded = false;
+        window.chartJsLoadFailed = false;
+        window.zoomPluginLoaded = false;
+        
+        // Chart.js CDN列表（按可靠性排序）
+        const chartCdnList = [
+            'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+            'https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+            'https://lib.baomitu.com/Chart.js/4.4.1/chart.umd.min.js',
+            'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js'
+        ];
+        
+        // Zoom插件CDN列表
+        const zoomCdnList = [
+            'https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js',
+            'https://unpkg.com/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js'
+        ];
+        
+        let currentChartCdnIndex = 0;
+        let currentZoomCdnIndex = 0;
+        
+        function updateLoadingStatus(message, details = '') {
+            const loadingText = document.getElementById('loadingText');
+            const loadingDetails = document.getElementById('loadingDetails');
+            if (loadingText) loadingText.textContent = message;
+            if (loadingDetails) loadingDetails.textContent = details;
+        }
+        
+        function retryChartLoad() {
+            console.log('用户点击重试，重新开始加载过程');
+            window.chartJsLoaded = false;
+            window.chartJsLoadFailed = false;
+            window.zoomPluginLoaded = false;
+            currentChartCdnIndex = 0;
+            currentZoomCdnIndex = 0;
+            
+            // 隐藏重试按钮，显示加载状态
+            const retryButton = document.getElementById('retryButton');
+            if (retryButton) retryButton.style.display = 'none';
+            
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) loadingIndicator.style.display = 'block';
+            
+            updateLoadingStatus('正在重新加载图表组件...', '重新尝试从CDN加载Chart.js库');
+            
+            // 移除可能存在的错误信息
+            const existingError = document.querySelector('.error');
+            if (existingError) existingError.remove();
+            
+            loadChartJS();
+        }
+        
+        function loadChartJS() {
+            if (currentChartCdnIndex >= chartCdnList.length) {
+                console.log('所有Chart.js CDN都加载失败，显示错误信息');
+                window.chartJsLoadFailed = true;
+                updateLoadingStatus('图表库加载失败', '所有CDN源都无法访问');
+                document.getElementById('retryButton').style.display = 'inline-block';
+                return;
+            }
+            
+            const cdnName = chartCdnList[currentChartCdnIndex].split('/')[2]; // 提取域名
+            updateLoadingStatus(
+                `正在加载图表组件... (${currentChartCdnIndex + 1}/${chartCdnList.length})`,
+                `尝试从 ${cdnName} 加载Chart.js库`
+            );
+            
+            const script = document.createElement('script');
+            script.src = chartCdnList[currentChartCdnIndex];
+            script.timeout = 5000; // 5秒超时
+            
+            script.onload = () => {
+                console.log(`Chart.js从CDN ${currentChartCdnIndex + 1}加载成功: ${chartCdnList[currentChartCdnIndex]}`);
+                window.chartJsLoaded = true;
+                updateLoadingStatus('Chart.js库加载成功，正在加载缩放插件...', `开始加载zoom插件`);
+                loadZoomPlugin(); // 加载zoom插件
+            };
+            
+            script.onerror = () => {
+                console.log(`Chart.js CDN ${currentChartCdnIndex + 1}加载失败: ${chartCdnList[currentChartCdnIndex]}`);
+                currentChartCdnIndex++;
+                setTimeout(loadChartJS, 1000); // 1秒后尝试下一个CDN
+            };
+            
+            // 超时处理
+            setTimeout(() => {
+                if (!window.chartJsLoaded && currentChartCdnIndex === chartCdnList.indexOf(script.src)) {
+                    console.log(`Chart.js CDN ${currentChartCdnIndex + 1}加载超时`);
+                    script.onerror();
+                }
+            }, 5000);
+            
+            document.head.appendChild(script);
+        }
+        
+        function loadZoomPlugin() {
+            if (currentZoomCdnIndex >= zoomCdnList.length) {
+                console.log('所有Zoom插件CDN都加载失败，继续但不启用缩放功能');
+                window.zoomPluginLoaded = false;
+                updateLoadingStatus('缩放插件加载失败，继续使用基础功能', '图表功能可用，但缩放功能不可用');
+                return;
+            }
+            
+            const cdnName = zoomCdnList[currentZoomCdnIndex].split('/')[2]; // 提取域名
+            updateLoadingStatus(
+                `正在加载缩放插件... (${currentZoomCdnIndex + 1}/${zoomCdnList.length})`,
+                `尝试从 ${cdnName} 加载zoom插件`
+            );
+            
+            const script = document.createElement('script');
+            script.src = zoomCdnList[currentZoomCdnIndex];
+            script.timeout = 5000; // 5秒超时
+            
+            script.onload = () => {
+                console.log(`Zoom插件从CDN ${currentZoomCdnIndex + 1}加载成功: ${zoomCdnList[currentZoomCdnIndex]}`);
+                window.zoomPluginLoaded = true;
+                
+                // 注册zoom插件到Chart.js
+                console.log('尝试注册zoom插件...');
+                
+                // 尝试多种注册方式
+                let registered = false;
+                
+                if (typeof Chart !== 'undefined' && Chart.register) {
+                    // 方式1：使用window.ChartZoom
+                    if (window.ChartZoom) {
+                        Chart.register(window.ChartZoom);
+                        registered = true;
+                        console.log('方式1：使用window.ChartZoom注册成功');
+                    }
+                    // 方式2：检查是否自动注册
+                    else if (Chart.Zoom) {
+                        console.log('方式2：插件已自动注册');
+                        registered = true;
+                    }
+                    // 方式3：检查全局变量
+                    else if (window.chartjsPluginZoom) {
+                        Chart.register(window.chartjsPluginZoom);
+                        registered = true;
+                        console.log('方式3：使用window.chartjsPluginZoom注册成功');
+                    }
+                }
+                
+                if (registered) {
+                    console.log('Zoom插件注册成功');
+                    updateLoadingStatus('所有组件加载成功', 'Chart.js和缩放插件都已就绪');
+                } else {
+                    console.log('Zoom插件注册失败，尝试直接使用');
+                    // 即使注册失败，也尝试使用zoom功能
+                    window.zoomPluginLoaded = true; // 保持为true，尝试使用
+                    updateLoadingStatus('缩放插件注册有问题，但尝试继续使用', '缩放功能可能不可用');
+                }
+            };
+            
+            script.onerror = () => {
+                console.log(`Zoom插件CDN ${currentZoomCdnIndex + 1}加载失败: ${zoomCdnList[currentZoomCdnIndex]}`);
+                currentZoomCdnIndex++;
+                setTimeout(loadZoomPlugin, 1000); // 1秒后尝试下一个CDN
+            };
+            
+            // 超时处理
+            setTimeout(() => {
+                if (!window.zoomPluginLoaded && currentZoomCdnIndex === zoomCdnList.indexOf(script.src)) {
+                    console.log(`Zoom插件CDN ${currentZoomCdnIndex + 1}加载超时`);
+                    script.onerror();
+                }
+            }, 5000);
+            
+            document.head.appendChild(script);
+        }
+        
+        // 开始加载
+        loadChartJS();
+        
+        // 额外的超时保护
+        setTimeout(() => {
+            if (!window.chartJsLoaded && typeof Chart === 'undefined') {
+                console.log('Chart.js最终超时，标记为加载失败');
+                window.chartJsLoadFailed = true;
+            } else if (window.chartJsLoaded && window.zoomPluginLoaded === undefined) {
+                console.log('zoom插件加载超时，但Chart.js可用');
+                window.zoomPluginLoaded = false;
+            }
+        }, 25000); // 25秒总超时，考虑zoom插件加载时间
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Times New Roman", "楷体", KaiTi, serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        /* 强制设置所有元素的字体和加粗 */
+        * {
+            font-family: "Times New Roman", "楷体", KaiTi, serif !important;
+            font-weight: bold !important;
+        }
+        
+        /* 确保数据显示面板的字体和加粗 */
+        .hover-data-name, .hover-data-type, .hover-data-value {
+            font-family: "Times New Roman", "楷体", KaiTi, serif !important;
+            font-weight: bold !important;
+        }
+        
+        /* 确保所有文本元素的字体和加粗 */
+        h1, h2, h3, h4, h5, h6, p, span, div, label, button, input, textarea, select, 
+        strong, b, em, i, small, code, pre, blockquote, cite, time, table, th, td, 
+        caption, figcaption, mark, del, ins, sub, sup, abbr, dfn, address {
+            font-family: "Times New Roman", "楷体", KaiTi, serif !important;
+            font-weight: bold !important;
+        }
+        
+        /* 特别针对可能存在的普通字体的元素 */
+        .normal, .regular, .light, .thin {
+            font-weight: bold !important;
+        }
+        
+        /* 确保所有可能包含文本的元素都加粗 */
+        body, body *, canvas, svg, text {
+            font-weight: bold !important;
+        }
+
+        .container {
+            max-width: 99vw;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 3.0rem;
+            margin-bottom: 10px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .header p {
+            font-size: 1.32rem;
+            font-weight: bold;
+            opacity: 1;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .upload-section {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .upload-area {
+            border: 3px dashed #007bff;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            background: white;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: #0056b3;
+            background: #f8f9ff;
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #28a745;
+            background: #f8fff8;
+        }
+
+        .upload-icon {
+            font-size: 3.6rem;
+            color: #007bff;
+            margin-bottom: 25px;
+            margin-top: -20px;
+        }
+
+        .upload-text {
+            font-size: 1.56rem;
+            color: #28a745;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .upload-hint {
+            color: #28a745;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .file-info {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 30px;
+            box-shadow: 0 10px 30px rgba(40, 167, 69, 0.3);
+            display: none;
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+            display: none;
+            margin: 20px 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .control-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-item label {
+            font-weight: bold;
+            color: #495057;
+            white-space: nowrap;
+            font-size: 1.2rem;
+        }
+
+        .control-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #007bff;
+        }
+
+        .charts-container {
+            padding: 30px;
+            padding-bottom: 60px;
+            display: none;
+        }
+
+        .batch-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .batch-info h3 {
+            margin-bottom: 15px;
+            font-size: 1.56rem;
+        }
+
+        .batch-details {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding: 0 15px;
+        }
+
+        .batch-detail {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60px;
+            flex: 0 1 auto;
+            min-width: 120px;
+        }
+
+        .chart-wrapper {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 60px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+        }
+
+        .chart-title {
+            font-size: 1.56rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 600px;
+            margin-bottom: 20px;
+        }
+
+        .hover-instruction {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px 20px;
+            font-size: 1.32rem;
+        }
+
+        .hover-time-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .hover-time {
+            font-size: 1.32rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .hover-duration {
+            font-size: 1.32rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .hover-data-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .hover-data-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px 15px;
+            border-left: 4px solid #b3c7f7;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 120px;
+            position: relative;
+        }
+
+        .hover-data-item.enabled {
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .hover-data-name {
+            font-size: 1.56rem;
+            margin-bottom: 3px;
+            font-weight: bold;
+        }
+
+        .hover-data-type {
+            font-size: 1.2rem;
+            margin-bottom: 3px;
+            opacity: 0.8;
+            font-weight: bold;
+        }
+
+        .hover-data-value {
+            font-size: 1.56rem;
+            font-weight: bold;
+            font-family: "Times New Roman", "楷体", KaiTi, serif !important;
+        }
+
+        .hover-data-item.disabled {
+            opacity: 1.0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #6c757d;
+            font-size: 1.32rem;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px;
+            border-left: 4px solid #dc3545;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2.4rem;
+            }
+            
+            .control-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧬 夏盛生产数据可视化分析系统 - 三级数据</h1>
+            <p>上传.xlsx格式的Excel文件，AI帮您分析第三个工作表（三级）的关键指标！</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">拖拽或者点击选择Excel文件到此处</div>
+                <div class="upload-hint">支持.xlsx格式的Excel文件</div>
+                <input type="file" id="fileInput" accept=".xlsx" />
+            </div>
+            <div class="file-info" id="fileInfo"></div>
+            <div class="loading-indicator" id="loadingIndicator" style="display: block;">
+                <div class="loading" id="loadingText">正在加载图表组件...</div>
+                <div style="margin-top: 10px; font-size: 1.08rem; color: #6c757d;" id="loadingDetails">
+                    正在尝试从CDN加载Chart.js库
+                </div>
+                <button onclick="retryChartLoad()" id="retryButton" 
+                        style="display: none; margin-top: 10px; background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    🔄 重新尝试
+                </button>
+            </div>
+        </div>
+
+        <div class="batch-info" id="batchInfo" style="margin: 20px 30px; display: none;"></div>
+
+        <div class="controls" id="controls">
+            <h3 style="margin-bottom: 15px; color: #2c3e50; font-size: 1.56rem; font-weight: 600; text-align: center;">🔍 请勾选要展示的测量值</h3>
+            <div class="control-group" id="parameterControls"></div>
+            <div style="margin-top: 20px; margin-bottom: 0px; display: flex; gap: 36px; justify-content: center;">
+                <button onclick="selectAllParameters()" style="background: linear-gradient(135deg, rgba(40, 167, 69, 0.8) 0%, rgba(32, 201, 151, 0.8) 100%); color: white; border: none; padding: 10px 20px; border-radius: 15px; cursor: pointer; font-weight: bold; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.32rem;"></span>
+                    勾选全部测量值
+                </button>
+                <button onclick="unselectAllParameters()" style="background: linear-gradient(135deg, rgba(253, 126, 20, 0.8) 0%, rgba(229, 90, 0, 0.8) 100%); color: white; border: none; padding: 10px 20px; border-radius: 15px; cursor: pointer; font-weight: bold; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(253, 126, 20, 0.3); transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.32rem;"></span>
+                    不勾选任何测量值
+                </button>
+            </div>
+        </div>
+
+        <div class="charts-container" id="chartsContainer">
+            <div id="charts"></div>
+        </div>
+    </div>
+
+    <script>
+        // Excel文件处理类
+        class ExcelDataViewer {
+            constructor() {
+                this.data = [];
+                this.charts = {};
+                // 定义三级数据的参数，基于Excel第三个sheet的列名
+                this.parameters = [
+                    { key: '发酵温度/℃', label: '发酵温度', color: '#FF6B35', enabled: true },
+                    { key: '压力/Mpa', label: '压力', color: '#4ECDC4', enabled: false },
+                    { key: '空气流量/（m³/h）', label: '空气流量', color: '#45B7D1', enabled: false },
+                    { key: '在线PH', label: '在线pH', color: '#96CEB4', enabled: false },
+                    { key: 'DO/%', label: 'DO溶氧', color: '#26de81', enabled: false },
+                    { key: '补糖速率/（L/h）', label: '补糖速率', color: '#fed330', enabled: false },
+                    { key: '补甘油速率/（L/h）', label: '补甘油速率', color: '#fd9644', enabled: false },
+                    { key: '补氨水速率/（L/h）', label: '补氨水速率', color: '#fc5c65', enabled: false },
+                    { key: '补甲醇速率/（L/h）', label: '补甲醇速率', color: '#fd79a8', enabled: false },
+                    { key: '补氮源/L', label: '补氮源', color: '#fdcb6e', enabled: false },
+                    { key: '离线PH', label: '离线pH', color: '#74B9FF', enabled: false },
+                    { key: '生物量', label: '生物量', color: '#A29BFE', enabled: false },
+                    { key: '酶活/(U/ml)', label: '酶活', color: '#6c5ce7', enabled: false },
+                    { key: '氨基氮含量mg/L', label: '氨基氮含量', color: '#a29bfe', enabled: false },
+                    { key: '蛋白含量/(g/L)', label: '蛋白含量', color: '#ffeaa7', enabled: false },
+                    { key: '甲醇含量/%', label: '甲醇含量', color: '#fab1a0', enabled: false },
+                    { key: '还原糖含量/%', label: '还原糖含量', color: '#FD7272', enabled: false },
+                    { key: '葡萄糖含量/%', label: '葡萄糖含量', color: '#00b894', enabled: false },
+                    { key: '补酸速率/（L/h）', label: '补酸速率', color: '#e17055', enabled: false },
+                    { key: '补泡敌速率/（L/h）', label: '补泡敌速率', color: '#81ecec', enabled: false },
+                    { key: '出料记录', label: '出料记录', color: '#FF0000', enabled: false },
+                    { key: '备注', label: '备注', color: '#9b59b6', enabled: false }
+                ];
+                
+                this.initializeEventListeners();
+                this.createParameterControls();
+            }
+
+            initializeEventListeners() {
+                const uploadArea = document.getElementById('uploadArea');
+                const fileInput = document.getElementById('fileInput');
+
+                // 文件上传事件
+                uploadArea.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', (e) => this.handleFileSelect(e.target.files[0]));
+
+                // 拖拽上传
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.name.endsWith('.xlsx')) {
+                        this.handleFileSelect(file);
+                    }
+                });
+            }
+
+            createParameterControls() {
+                const container = document.getElementById('parameterControls');
+                
+                this.parameters.forEach((param, index) => {
+                    const controlItem = document.createElement('div');
+                    controlItem.className = 'control-item';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `param_${index}`;
+                    checkbox.checked = param.enabled;
+                    checkbox.addEventListener('change', () => {
+                        param.enabled = checkbox.checked;
+                        this.updateCharts();
+                    });
+                    
+                    const label = document.createElement('label');
+                    label.htmlFor = `param_${index}`;
+                    label.textContent = param.label;
+                    label.style.color = param.color;
+                    label.style.fontWeight = 'bold';
+                    
+                    controlItem.appendChild(checkbox);
+                    controlItem.appendChild(label);
+                    container.appendChild(controlItem);
+                });
+            }
+
+            async handleFileSelect(file) {
+                if (!file) return;
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const workbook = XLSX.read(arrayBuffer);
+                    
+                    // 获取第三个工作表（三级）
+                    if (workbook.SheetNames.length < 3) {
+                        throw new Error('Excel文件中没有找到第三个工作表');
+                    }
+                    
+                    const thirdSheetName = workbook.SheetNames[2];
+                    const worksheet = workbook.Sheets[thirdSheetName];
+                    
+                    // 转换为JSON格式
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (jsonData.length === 0) {
+                        throw new Error('Excel文件第三个工作表中未找到有效数据');
+                    }
+
+                    // 解析Excel数据
+                    const data = this.parseExcelData(jsonData);
+                    
+                    if (data.length === 0) {
+                        throw new Error('第三个工作表中未找到有效的发酵数据');
+                    }
+
+                    this.data = data;
+                    // 预处理稀疏数据，为缺失点生成AI预测值
+                    this.preprocessSparseData();
+                    // 调试：检查预处理结果
+                    this.debugPreprocessingResults();
+                    this.showBatchInfo(jsonData, file, data);
+                    this.showControls();
+                    this.createCharts();
+                    
+                } catch (error) {
+                    this.showError(`文件解析失败: ${error.message}`);
+                }
+            }
+
+            parseExcelData(jsonData) {
+                try {
+                    const data = [];
+                    const descriptionInfo = [];
+                    let hasContamination = false; // 检查是否有染菌
+                    
+                    // 第一行是标题行
+                    const headers = jsonData[0];
+                    console.log('Excel列标题:', headers);
+                    
+                    // 找到镜检列的索引
+                    const mirrorCheckIndex = headers.findIndex(header => header === '镜检');
+                    
+                    // 从第二行开始是数据
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        if (!row || row.length === 0) continue;
+                        
+                        // 收集第一列的所有非空内容
+                        if (row[0] && typeof row[0] === 'string' && row[0].trim() !== '') {
+                            descriptionInfo.push(row[0].trim());
+                        }
+                        
+                        // 检查镜检列是否有染菌
+                        if (mirrorCheckIndex !== -1 && row[mirrorCheckIndex]) {
+                            const mirrorValue = String(row[mirrorCheckIndex]).trim();
+                            if (mirrorValue === '染菌') {
+                                hasContamination = true;
+                            }
+                        }
+                        
+                        // 跳过描述行（第一列包含描述信息的行）
+                        if (row[0] && typeof row[0] === 'string' && 
+                            (row[0].includes('罐号') || row[0].includes('批号') ||
+                             row[0].includes('体积') || row[0].includes('氨氮') ||
+                             row[0].includes('pH') || row[0].includes('累计') ||
+                             row[0].includes('出罐') || row[0].includes('检测') ||
+                             row[0].includes('消前') || row[0].includes('消后') ||
+                             row[0].includes('小料') || row[0] === '')) {
+                            continue;
+                        }
+                        
+                        const record = {};
+                        
+                        // 解析每一列
+                        headers.forEach((header, index) => {
+                            const value = row[index];
+                            if (header === '日期时间' && value) {
+                                // 处理日期时间
+                                if (typeof value === 'number') {
+                                    // Excel日期数字转换
+                                    record['日期时间'] = new Date((value - 25569) * 86400 * 1000);
+                                } else {
+                                    record['日期时间'] = new Date(value);
+                                }
+                            } else if (header === '发酵周期/h') {
+                                record['发酵计时'] = parseFloat(value) || 0;
+                            } else if (header === '备注') {
+                                // 备注字段保持为字符串，不转换为数字
+                                record[header] = (value !== undefined && value !== null) ? 
+                                    String(value).trim() : '';
+                            } else if (header) {
+                                // 确保所有数值字段都被初始化，即使为空也设为0
+                                record[header] = (value !== undefined && value !== null && value !== '') ? 
+                                    (typeof value === 'number' ? value : parseFloat(value) || 0) : 0;
+                            }
+                        });
+                        
+                        // 只添加有日期时间的记录
+                        if (record['日期时间'] && !isNaN(record['日期时间'].getTime())) {
+                            data.push(record);
+                        }
+                    }
+                    
+                    // 确保所有数据字段都是有效数值
+                    data.forEach((record, index) => {
+                        Object.keys(record).forEach(key => {
+                            if (key !== '日期时间' && key !== '备注' && typeof record[key] === 'number' && isNaN(record[key])) {
+                                console.warn(`第${index + 1}行的${key}字段包含NaN值，已设为0`);
+                                record[key] = 0;
+                            }
+                        });
+                    });
+                    
+                    // 将描述信息和染菌状态存储到数据中，以便后续使用
+                    data.descriptionInfo = descriptionInfo;
+                    data.hasContamination = hasContamination;
+                    
+                    return data.sort((a, b) => a['日期时间'] - b['日期时间']);
+                } catch (error) {
+                    throw new Error('Excel数据解析失败: ' + error.message);
+                }
+            }
+
+            showBatchInfo(jsonData, file, data) {
+                const container = document.getElementById('batchInfo');
+                container.style.display = 'block';
+                
+                // 计算发酵时长
+                const startTime = data[0]?.日期时间;
+                const endTime = data[data.length - 1]?.日期时间;
+                const duration = endTime && startTime ? 
+                    Math.round((endTime - startTime) / (1000 * 60 * 60)) : 0;
+                
+                // 获取动态读取的第一列信息
+                const descriptionInfo = data.descriptionInfo || [];
+                
+                // 生成第一列信息的HTML
+                let descriptionHtml = '';
+                if (descriptionInfo.length > 0) {
+                    descriptionHtml = descriptionInfo.map(info => `
+                        <div class="batch-detail">
+                            <strong>${info}</strong>
+                        </div>
+                    `).join('');
+                }
+                
+                // 获取染菌状态
+                const hasContamination = data.hasContamination || false;
+                const contaminationStatus = hasContamination ? '染菌' : '未染菌';
+                const contaminationColor = hasContamination ? 
+                    'background: linear-gradient(135deg, rgba(220, 53, 69, 0.8) 0%, rgba(255, 102, 102, 0.8) 100%); color: white;' : 
+                    'background: linear-gradient(135deg, rgba(40, 167, 69, 0.8) 0%, rgba(32, 201, 151, 0.8) 100%); color: white;';
+                
+                container.innerHTML = `
+                    <h3 style="font-size: 1.56rem; text-align: center;">🧬 当前生产批次数据总览（三级）</h3>
+                    <div class="batch-details">
+                        <div class="batch-detail">
+                            <strong>文件名：</strong> ${file.name}
+                        </div>
+                        <div class="batch-detail">
+                            <strong>数据点数：</strong> ${data.length}
+                        </div>
+                        <div class="batch-detail">
+                            <strong>发酵时长：</strong> ${duration}小时
+                        </div>
+                        <div class="batch-detail">
+                            <strong>文件大小：</strong> ${(file.size / 1024).toFixed(1)} KB
+                        </div>
+                        ${descriptionHtml}
+                        <div class="batch-detail" style="${contaminationColor} border-radius: 8px; padding: 10px 15px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); font-weight: bold; text-align: center;">
+                            <strong>镜检状态：${contaminationStatus}</strong>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showControls() {
+                document.getElementById('controls').style.display = 'block';
+            }
+
+            createCharts() {
+                const container = document.getElementById('chartsContainer');
+                container.style.display = 'block';
+                
+                const chartsDiv = document.getElementById('charts');
+                chartsDiv.innerHTML = '';
+
+                // 清理旧图表
+                Object.values(this.charts).forEach(chart => {
+                    if (chart) chart.destroy();
+                });
+                this.charts = {};
+
+                this.updateCharts();
+            }
+
+            updateCharts() {
+                const chartsDiv = document.getElementById('charts');
+                const enabledParams = this.parameters.filter(p => p.enabled);
+                
+                chartsDiv.innerHTML = '';
+
+                this.createSingleChart(enabledParams, chartsDiv);
+                this.createHoverDataPanel(chartsDiv);
+            }
+
+            createHoverDataPanel(container) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'chart-wrapper';
+                wrapper.innerHTML = `
+                    <div class="chart-title">🧬 上图鼠标悬停处生产数据监测面板</div>
+                    <div class="hover-time-info">
+                        <div class="hover-time">📅 暂无数据</div>
+                        <div class="hover-duration">发酵第0.0小时</div>
+                    </div>
+                    <div class="hover-data-grid" id="hoverDataGrid"></div>
+                `;
+                container.appendChild(wrapper);
+            }
+
+            createSingleChart(parameters, container) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'chart-wrapper';
+                const zoomHint = window.zoomPluginLoaded ? 
+                    '小提示：鼠标滚轮横向缩放时间轴，双击鼠标左键重置缩放' :
+                    '';
+                
+                wrapper.innerHTML = `
+                    <div class="chart-title">🧬 三级发酵过程关键测量值时序分析图</div>
+                    <div style="text-align: center; font-size: 1.2rem; margin-bottom: 20px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                        <span style="color: #28a745; font-weight: bold;">⚫ 实心点：实测值</span>
+                        <span style="color: #ff9800; font-weight: bold;">⚪ 空心点：AI预测值 🤖</span>
+                        <span style="color: #FF0000; font-weight: bold;">🔴 大红点：出料记录 📦</span>
+                        <span style="color: #9b59b6; font-weight: bold;">🟣 紫色点：备注信息 📝</span>
+                    </div>
+                    <div style="text-align: center; font-size: 1.2rem; color: #28a745; font-weight: bold; margin-bottom: 5px;">
+                        ${zoomHint}
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart_main"></canvas>
+                    </div>
+                `;
+                container.appendChild(wrapper);
+
+                const canvas = wrapper.querySelector('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // 如果没有启用的参数，显示空图表
+                if (parameters.length === 0) {
+                    const emptyChartPlugin = {
+                        id: 'emptyChart',
+                        afterDraw: function(chart) {
+                            const ctx = chart.ctx;
+                            const width = chart.width;
+                            const height = chart.height;
+                            
+                            ctx.save();
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = '#28a745';
+                            ctx.font = 'bold 19px "Times New Roman", "楷体", KaiTi, serif';
+                            ctx.fillText('请在上方勾选要展示的测量值', width / 2, height / 2 - 10);
+                            ctx.font = 'bold 19px "Times New Roman", "楷体", KaiTi, serif';
+                            ctx.fillText('勾选后在此处将展示相应测量值的时序分析图', width / 2, height / 2 + 20);
+                            ctx.restore();
+                        }
+                    };
+
+                    const chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: []
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { enabled: false }
+                            },
+                            scales: {
+                                x: {
+                                    title: { 
+                                        display: true, 
+                                        text: '时间',
+                                        font: { size: 19, weight: 'bold', family: '"Times New Roman", "楷体", KaiTi, serif' }
+                                    }
+                                },
+                                y: {
+                                    title: { 
+                                        display: true, 
+                                        text: '测量值',
+                                        font: { size: 19, weight: 'bold', family: '"Times New Roman", "楷体", KaiTi, serif' }
+                                    }
+                                }
+                            }
+                        },
+                        plugins: [emptyChartPlugin]
+                    });
+
+                    this.charts['main'] = chart;
+                    return;
+                }
+
+                // 准备数据
+                const labels = this.data.map(d => d.日期时间.toLocaleString('zh-CN'));
+                
+                // 为每个参数创建独立的Y轴配置
+                const scales = { 
+                    x: {
+                        title: { display: true, text: '时间', font: { size: 19, family: '"Times New Roman", "楷体", KaiTi, serif' } },
+                        ticks: { maxTicksLimit: 10, font: { size: 19, family: '"Times New Roman", "楷体", KaiTi, serif' } }
+                    }
+                };
+                
+                const datasets = parameters.map((param, index) => {
+                    // 检查是否为稀疏采样参数
+                    const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                    
+                    // 检查是否为出料记录参数
+                    const isOutputRecord = param.key === '出料记录' || param.label === '出料记录';
+                    
+                    // 检查是否为备注参数
+                    const isRemarkRecord = param.key === '备注' || param.label === '备注';
+                    
+                    let values;
+                    
+                    if (sparseParams.includes(param.key)) {
+                        // 对于稀疏参数，使用预测数据（包含真实值和AI预测值）
+                        values = this.data.map(d => d[`${param.key}_predicted`] || 0);
+                    } else {
+                        // 对于常规参数，直接使用原始数据
+                        values = this.data.map(d => d[param.key] || 0);
+                    }
+                    
+                    // 为出料记录特殊处理：只保留非0非空的点
+                    if (isOutputRecord) {
+                        values = this.data.map(d => {
+                            const value = d[param.key];
+                            // 只有非0且非空的值才显示，其他设为null（不显示点）
+                            return (value !== null && value !== undefined && value !== 0 && value !== '') ? value : null;
+                        });
+                    }
+                    
+                    // 为备注记录特殊处理：只保留非空字符串的点，统一设为100显示
+                    if (isRemarkRecord) {
+                        values = this.data.map(d => {
+                            const value = d[param.key];
+                            // 只有非空字符串才显示，统一设为100，其他设为null（不显示点）
+                            return (value !== null && value !== undefined && value !== '' && typeof value === 'string') ? 100 : null;
+                        });
+                    }
+                    
+                    // 为每个数据集创建独立的Y轴
+                    const yAxisId = `y${index}`;
+                    const isLeftSide = index % 2 === 0;
+                    const axisPosition = isLeftSide ? 'left' : 'right';
+                    
+                    // 计算数据范围
+                    const validValues = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+                    const minValue = validValues.length > 0 ? Math.min(...validValues) : 0;
+                    const maxValue = validValues.length > 0 ? Math.max(...validValues) : 1;
+                    const range = maxValue - minValue || 1;
+                    const margin = range * 0.1;
+                    
+                    scales[yAxisId] = {
+                        type: 'linear',
+                        position: axisPosition,
+                        title: {
+                            display: true,
+                            text: param.label,
+                            color: param.color,
+                            font: { weight: 'bold', size: 19, family: '"Times New Roman", "楷体", KaiTi, serif' }
+                        },
+                        min: minValue - margin,
+                        max: maxValue + margin,
+                        ticks: {
+                            color: param.color,
+                            font: { size: 19, weight: 'bold', family: '"Times New Roman", "楷体", KaiTi, serif' },
+                            callback: function(value) { return (typeof value === 'number' && !isNaN(value) ? value : 0).toFixed(1); }
+                        },
+                        grid: {
+                            drawOnChartArea: index === 0,
+                            color: param.color + '20'
+                        },
+                        border: {
+                            color: param.color,
+                            width: 2
+                        }
+                    };
+                    
+                    // 为稀疏参数创建差异化的点样式数组
+                    let pointStyles, pointBackgrounds, pointBorders, pointRadiusArray, pointHoverRadiusArray;
+                    
+                    if (isOutputRecord) {
+                        // 出料记录特殊处理：较大的标记点
+                        pointStyles = 'circle';
+                        pointBackgrounds = param.color;
+                        pointBorders = param.color;
+                        pointRadiusArray = 8; // 增大标记点大小
+                        pointHoverRadiusArray = 12; // 增大悬停时的大小
+                    } else if (isRemarkRecord) {
+                        // 备注记录特殊处理：较大的标记点
+                        pointStyles = 'circle';
+                        pointBackgrounds = param.color;
+                        pointBorders = param.color;
+                        pointRadiusArray = 7; // 中等大小的标记点
+                        pointHoverRadiusArray = 11; // 悬停时的大小
+                    } else if (sparseParams.includes(param.key)) {
+                        // 为稀疏参数的每个数据点设置不同样式
+                        pointStyles = this.data.map(record => {
+                            const isPredicted = record[`${param.key}_isPredicted`];
+                            return isPredicted ? 'circle' : 'circle'; // 预测值和实测值都用圆形
+                        });
+                        
+                        pointBackgrounds = this.data.map(record => {
+                            const isPredicted = record[`${param.key}_isPredicted`];
+                            return isPredicted ? 'white' : param.color; // 预测值空心白色，实测值实心
+                        });
+                        
+                        pointBorders = this.data.map(record => {
+                            return param.color; // 边框都使用参数颜色
+                        });
+                        
+                        pointRadiusArray = this.data.map(record => {
+                            const isPredicted = record[`${param.key}_isPredicted`];
+                            return isPredicted ? 5 : 4; // 预测值5，真实值4
+                        });
+                        
+                        pointHoverRadiusArray = this.data.map(record => {
+                            const isPredicted = record[`${param.key}_isPredicted`];
+                            return isPredicted ? 10 : 8; // 预测值10，真实值8
+                        });
+                    } else {
+                        pointStyles = 'circle';
+                        pointBackgrounds = param.color;
+                        pointBorders = param.color;
+                        pointRadiusArray = 3;
+                        pointHoverRadiusArray = 6;
+                    }
+                    
+                    return {
+                        label: param.label,
+                        data: values,
+                        borderColor: (isOutputRecord || isRemarkRecord) ? 'transparent' : param.color, // 出料记录和备注记录不显示连线
+                        backgroundColor: param.color + '20',
+                        fill: false,
+                        tension: 0.5,
+                        pointRadius: pointRadiusArray,
+                        pointHoverRadius: pointHoverRadiusArray,
+                        borderWidth: (isOutputRecord || isRemarkRecord) ? 0 : 2, // 出料记录和备注记录不显示连线
+                        yAxisID: yAxisId,
+                        pointStyle: pointStyles,
+                        pointBackgroundColor: pointBackgrounds,
+                        pointHoverBackgroundColor: pointBackgrounds,
+                        pointBorderColor: pointBorders,
+                        pointBorderWidth: isOutputRecord ? 3 : (isRemarkRecord ? 2 : (sparseParams.includes(param.key) ? 2 : 1)), // 调整边框宽度
+                        pointHoverBorderWidth: isOutputRecord ? 4 : (isRemarkRecord ? 3 : (sparseParams.includes(param.key) ? 2 : 1)),
+                        showLine: !(isOutputRecord || isRemarkRecord), // 出料记录和备注记录不显示连线
+                        // 为稀疏参数添加标识（仅用于内部逻辑）
+                        sparseParam: sparseParams.includes(param.key),
+                        // 为出料记录添加标识
+                        outputRecord: isOutputRecord,
+                        // 为备注记录添加标识
+                        remarkRecord: isRemarkRecord
+                    };
+                });
+
+                // 十字线插件
+                const crosshairPlugin = {
+                    id: 'crosshair',
+                    afterDatasetsDraw: function(chart) {
+                        if (chart.tooltip._active && chart.tooltip._active.length) {
+                            const ctx = chart.ctx;
+                            const verticalLinePoint = chart.tooltip._active[0];
+                            const x = verticalLinePoint.element.x;
+                            const chartArea = chart.chartArea;
+                            
+                            ctx.save();
+                            ctx.setLineDash([8, 4]);
+                            ctx.strokeStyle = 'rgba(102, 126, 234, 0.7)';
+                            ctx.lineWidth = 1.5;
+                            ctx.beginPath();
+                            ctx.moveTo(x, chartArea.top);
+                            ctx.lineTo(x, chartArea.bottom);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                };
+
+                // 准备插件选项
+                const pluginOptions = {};
+                if (window.zoomPluginLoaded) {
+                    pluginOptions.zoom = {
+                        limits: { x: {min: 'original', max: 'original'} },
+                        zoom: { wheel: { enabled: true, speed: 0.1 }, mode: 'x' }
+                    };
+                }
+
+                // 创建图表
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        onHover: (event, activeElements) => {
+                            this.updateHoverDataPanel(activeElements, chart);
+                        },
+                        animation: { duration: 2000, easing: 'easeInOutQuart' },
+                        plugins: {
+                            ...pluginOptions,
+                            legend: {
+                                position: 'top',
+                                align: 'center',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20,
+                                    boxWidth: 12,
+                                    boxHeight: 12,
+                                    font: { size: 19, family: '"Times New Roman", "楷体", KaiTi, serif' },
+                                    generateLabels: function(chart) {
+                                        const original = Chart.defaults.plugins.legend.labels.generateLabels;
+                                        const labels = original.call(this, chart);
+                                        
+                                        labels.forEach((label, index) => {
+                                            const dataset = chart.data.datasets[index];
+                                            const values = dataset.data.filter(v => v !== null && v !== undefined && !isNaN(v));
+                                            if (values.length > 0) {
+                                                const min = Math.min(...values);
+                                                const max = Math.max(...values);
+                                                const minVal = typeof min === 'number' && !isNaN(min) ? min : 0;
+                            const maxVal = typeof max === 'number' && !isNaN(max) ? max : 0;
+                            label.text += ` [${minVal.toFixed(1)} - ${maxVal.toFixed(1)}]`;
+                                            }
+                                        });
+                                        
+                                        return labels;
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                                titleColor: 'white',
+                                bodyColor: 'white',
+                                titleFont: { size: 17, weight: 'bold', family: '"Times New Roman", "楷体", KaiTi, serif' },
+                                bodyFont: { size: 16, weight: 'bold', family: '"Times New Roman", "楷体", KaiTi, serif' },
+                                callbacks: {
+                                    title: function(context) {
+                                        const index = context[0].dataIndex;
+                                        const record = this.data[index];
+                                        const dateTime = record.日期时间;
+                                        const dateStr = dateTime.toLocaleDateString('zh-CN');
+                                        const timeStr = dateTime.toLocaleTimeString('zh-CN');
+                                        return `${dateStr}\n${timeStr}\n发酵第${(record.发酵计时 || 0).toFixed(1)}小时`;
+                                    }.bind(this),
+                                    label: function(context) {
+                                        const dataset = context.dataset;
+                                        const value = context.parsed.y;
+                                        const dataIndex = context.dataIndex;
+                                        const paramKey = this.parameters.find(p => p.label === dataset.label)?.key;
+                                        const record = this.data[dataIndex];
+                                        const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                                        
+                                        let label = `${dataset.label}: ${(typeof value === 'number' && !isNaN(value) ? value : 0).toFixed(2)}`;
+                                        
+                                        // 为稀疏参数添加标识
+                        if (sparseParams.includes(paramKey)) {
+                            const isPredicted = record[`${paramKey}_isPredicted`];
+                            if (isPredicted) {
+                                label += ' 🤖';
+                            }
+                        }
+                        
+                                                                // 为出料记录添加特殊标识
+                        if (paramKey === '出料记录') {
+                            label += ' 📦';
+                        }
+                        
+                        // 为备注记录添加特殊标识，并显示真实的字符串值
+                        if (paramKey === '备注') {
+                            const remarkValue = record[paramKey];
+                            if (remarkValue && typeof remarkValue === 'string') {
+                                label = `${dataset.label}: ${remarkValue} 📝`;
+                            }
+                        }
+                                        
+                                        return label;
+                                    }.bind(this),
+                                    labelTextColor: function(context) {
+                                        const dataIndex = context.dataIndex;
+                                        const paramKey = this.parameters.find(p => p.label === context.dataset.label)?.key;
+                                        const record = this.data[dataIndex];
+                                        const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                                        
+                                        if (sparseParams.includes(paramKey)) {
+                            // 稀疏参数：检查是否为预测值
+                            const isPredicted = record[`${paramKey}_isPredicted`];
+                            return isPredicted ? '#ff9800' : '#28a745'; // 预测值橙色，实测值绿色
+                        } else if (paramKey === '出料记录') {
+                            // 出料记录：使用红色
+                            return '#FF0000';
+                        } else if (paramKey === '备注') {
+                            // 备注记录：使用紫色
+                            return '#9b59b6';
+                        } else {
+                            // 常规参数：都是实测值，使用绿色
+                            return '#28a745';
+                        }
+                                    }.bind(this)
+                                }
+                            }
+                        },
+                        scales: scales
+                    },
+                    plugins: [crosshairPlugin]
+                });
+
+                this.charts['main'] = chart;
+                
+                // 添加双击重置缩放功能
+                if (window.zoomPluginLoaded) {
+                    canvas.addEventListener('dblclick', () => {
+                        if (chart && chart.resetZoom) {
+                            chart.resetZoom();
+                        }
+                    });
+                }
+            }
+
+            updateHoverDataPanel(activeElements, chart) {
+                const hoverDataGrid = document.getElementById('hoverDataGrid');
+                const hoverTimeInfo = document.querySelector('.hover-time-info');
+                
+                if (!hoverDataGrid) return;
+                
+                if (activeElements.length === 0) {
+                    // 没有悬停时，显示当前时间和默认数据
+                    if (hoverTimeInfo) {
+                        const now = new Date();
+                        hoverTimeInfo.innerHTML = `
+                            <div class="hover-time">📅 ${now.toLocaleString('zh-CN')}</div>
+                            <div class="hover-duration">发酵第0.0小时</div>
+                        `;
+                    }
+                    
+                    const dataItems = this.parameters.map(param => {
+                        const isEnabled = param.enabled;
+                        const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                        
+                        let displayValue = '0.00';
+                        let valueType = '';
+                        let valueColor = isEnabled ? param.color : '#999';
+                        
+                        if (this.data && this.data.length > 0) {
+                            // 获取最新数据点的值
+                            const latestRecord = this.data[this.data.length - 1];
+                            
+                            if (sparseParams.includes(param.key)) {
+                        // 稀疏参数：使用预处理的数据
+                        const predictedValue = latestRecord[`${param.key}_predicted`];
+                        const isPredicted = latestRecord[`${param.key}_isPredicted`];
+                        
+                        if (predictedValue !== null && predictedValue !== undefined) {
+                            displayValue = predictedValue.toFixed(2);
+                            if (!isPredicted) {
+                                valueType = ' (实测)';
+                                valueColor = param.color;
+                            } else {
+                                valueType = ' (AI预测)';
+                                valueColor = param.color;
+                            }
+                        }
+                    } else if (param.key === '出料记录') {
+                        // 出料记录：特殊处理
+                        const outputValue = latestRecord[param.key];
+                        if (outputValue !== null && outputValue !== undefined && outputValue !== 0 && outputValue !== '') {
+                            displayValue = outputValue.toString();
+                            valueType = ' (出料)';
+                            valueColor = param.color;
+                        } else {
+                            displayValue = '无出料';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    } else if (param.key === '备注') {
+                        // 备注记录：特殊处理
+                        const remarkValue = latestRecord[param.key];
+                        if (remarkValue && typeof remarkValue === 'string' && remarkValue.trim() !== '') {
+                            displayValue = remarkValue;
+                            valueType = ' (备注)';
+                            valueColor = param.color;
+                        } else {
+                            displayValue = '无备注';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    } else {
+                        // 常规参数：使用原始数据
+                        const realValue = latestRecord[param.key];
+                        if (realValue !== null && realValue !== undefined && typeof realValue === 'number' && !isNaN(realValue)) {
+                            displayValue = realValue.toFixed(2);
+                            valueType = ' (实测)';
+                            valueColor = param.color;
+                        }
+                    }
+                        }
+                        
+                        return `
+                            <div class="hover-data-item ${isEnabled ? 'enabled' : 'disabled'}" style="border-left-color: ${param.color};">
+                                <div class="hover-data-name" style="color: ${param.color}; font-weight: bold; font-size: 1.56rem; margin-bottom: 3px;">
+                                    ${param.label}
+                                </div>
+                                <div class="hover-data-type" style="color: ${param.color}; font-size: 1.2rem; margin-bottom: 3px; opacity: 0.8; font-weight: bold;">
+                                    ${valueType ? `(${valueType})` : ''}
+                                </div>
+                                <div class="hover-data-value" style="color: ${valueColor}; font-size: 1.56rem; font-weight: bold; font-family: 'Times New Roman', '楷体', KaiTi, serif;">
+                                    ${displayValue}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    hoverDataGrid.innerHTML = `<div class="hover-data-items">${dataItems}</div>`;
+                    return;
+                }
+                
+                // 获取悬停点的索引
+                const dataIndex = activeElements[0].index;
+                const record = this.data[dataIndex];
+                
+                if (!record) return;
+                
+                // 更新时间信息
+                if (hoverTimeInfo) {
+                    hoverTimeInfo.innerHTML = `
+                        <div class="hover-time">📅 ${record.日期时间.toLocaleString('zh-CN')}</div>
+                        <div class="hover-duration">发酵第${(record.发酵计时 || 0).toFixed(1)}小时</div>
+                    `;
+                }
+                
+                // 创建所有参数的数据网格
+                const dataItems = this.parameters.map(param => {
+                    const isEnabled = param.enabled;
+                    const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                    
+                    let displayValue, valueType, valueColor;
+                    
+                    // 检查是否为稀疏采样参数
+                    if (sparseParams.includes(param.key)) {
+                        // 稀疏参数：从预处理数据中获取值
+                        const predictedValue = record[`${param.key}_predicted`];
+                        const isPredicted = record[`${param.key}_isPredicted`];
+                        
+                        if (predictedValue !== null && predictedValue !== undefined) {
+                            displayValue = predictedValue.toFixed(2);
+                            
+                            if (!isPredicted) {
+                                // 真实测量值
+                                valueType = '实测值';
+                                valueColor = param.color;
+                            } else {
+                                // AI预测值
+                                valueType = 'AI预测值';
+                                valueColor = param.color;
+                            }
+                        } else {
+                            displayValue = '无数据';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    } else if (param.key === '出料记录') {
+                        // 出料记录：特殊处理
+                        const outputValue = record[param.key];
+                        if (outputValue !== null && outputValue !== undefined && outputValue !== 0 && outputValue !== '') {
+                            displayValue = outputValue.toString();
+                            valueType = '出料记录';
+                            valueColor = param.color;
+                        } else {
+                            displayValue = '无出料';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    } else if (param.key === '备注') {
+                        // 备注记录：特殊处理
+                        const remarkValue = record[param.key];
+                        if (remarkValue && typeof remarkValue === 'string' && remarkValue.trim() !== '') {
+                            displayValue = remarkValue;
+                            valueType = '备注信息';
+                            valueColor = param.color;
+                        } else {
+                            displayValue = '无备注';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    } else {
+                        // 常规参数：直接使用原始数据
+                        const realValue = record[param.key];
+                        if (realValue !== null && realValue !== undefined && typeof realValue === 'number' && !isNaN(realValue)) {
+                            displayValue = realValue.toFixed(2);
+                            valueType = '实测值';
+                            valueColor = param.color;
+                        } else {
+                            displayValue = '无数据';
+                            valueType = '';
+                            valueColor = '#999';
+                        }
+                    }
+                    
+                    return `
+                        <div class="hover-data-item ${isEnabled ? 'enabled' : 'disabled'}" style="border-left-color: ${param.color};">
+                            <div class="hover-data-name" style="color: ${param.color}; font-weight: bold; font-size: 1.56rem; margin-bottom: 3px;">
+                                ${param.label}
+                            </div>
+                            <div class="hover-data-type" style="color: ${param.color}; font-size: 1.2rem; margin-bottom: 3px; opacity: 0.8; font-weight: bold;">
+                                ${valueType ? `(${valueType})` : ''}
+                            </div>
+                            <div class="hover-data-value" style="color: ${valueColor}; font-size: 1.56rem; font-weight: bold; font-family: 'Times New Roman', '楷体', KaiTi, serif;">
+                                ${displayValue}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                hoverDataGrid.innerHTML = `<div class="hover-data-items">${dataItems}</div>`;
+            }
+
+            // 为稀疏采样数据预处理完整的数据集
+            preprocessSparseData() {
+                const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                
+                console.log('开始稀疏数据预处理，参数列表:', sparseParams);
+                
+                // 为每个稀疏参数创建完整的预测数据
+                sparseParams.forEach(paramKey => {
+                    this.createCompleteDataset(paramKey);
+                });
+            }
+
+            // 调试预处理结果
+            debugPreprocessingResults() {
+                const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                
+                console.log('=== 稀疏数据预处理结果检查 ===');
+                
+                sparseParams.forEach(paramKey => {
+                    const realCount = this.data.filter(record => record[paramKey] && record[paramKey] > 0).length;
+                    const predictedCount = this.data.filter(record => record[`${paramKey}_isPredicted`] === true).length;
+                    const totalCount = this.data.length;
+                    
+                    console.log(`${paramKey}:`);
+                    console.log(`  总数据点: ${totalCount}`);
+                    console.log(`  真实测量点: ${realCount}`);
+                    console.log(`  AI预测点: ${predictedCount}`);
+                    console.log(`  覆盖率: ${((realCount + predictedCount) / totalCount * 100).toFixed(1)}%`);
+                    
+                    // 显示前几个预测值样例
+                    const samples = this.data.slice(0, 5).map(record => ({
+                        time: record.发酵计时,
+                        original: record[paramKey],
+                        predicted: record[`${paramKey}_predicted`],
+                        isPredicted: record[`${paramKey}_isPredicted`]
+                    }));
+                    console.log(`  前5个数据点样例:`, samples);
+                });
+                
+                console.log('=== 预处理结果检查完成 ===');
+                
+                // 检查备注数据
+                const remarkCount = this.data.filter(record => record['备注'] && typeof record['备注'] === 'string' && record['备注'].trim() !== '').length;
+                console.log(`备注信息统计:`);
+                console.log(`  总数据点: ${this.data.length}`);
+                console.log(`  有备注的点: ${remarkCount}`);
+                
+                if (remarkCount > 0) {
+                    const remarkSamples = this.data.filter(record => record['备注'] && typeof record['备注'] === 'string' && record['备注'].trim() !== '').slice(0, 3);
+                    console.log(`  备注样例:`, remarkSamples.map(r => ({ time: r.发酵计时, remark: r['备注'] })));
+                }
+            }
+
+            // 为单个稀疏参数创建完整数据集
+            createCompleteDataset(paramKey) {
+                // 获取所有真实测量值（非零值且非空值）
+                const realValues = [];
+                this.data.forEach((record, index) => {
+                    const value = record[paramKey];
+                    if (value && value > 0) {
+                        realValues.push({
+                            index: index,
+                            value: value,
+                            time: record.发酵计时 || 0
+                        });
+                    }
+                });
+
+                console.log(`${paramKey} 找到 ${realValues.length} 个真实测量值:`, realValues);
+
+                if (realValues.length === 0) {
+                    // 没有真实值，所有点都设为0
+                    this.data.forEach((record, index) => {
+                        record[`${paramKey}_predicted`] = 0;
+                        record[`${paramKey}_isPredicted`] = false;
+                    });
+                    return;
+                }
+
+                if (realValues.length === 1) {
+                    // 只有一个真实值，用它填充所有缺失点
+                    const singleValue = realValues[0].value;
+                    this.data.forEach((record, index) => {
+                        if (!record[paramKey] || record[paramKey] <= 0) {
+                            record[`${paramKey}_predicted`] = singleValue;
+                            record[`${paramKey}_isPredicted`] = true;
+                        } else {
+                            record[`${paramKey}_predicted`] = record[paramKey];
+                            record[`${paramKey}_isPredicted`] = false;
+                        }
+                    });
+                    return;
+                }
+
+                // 使用样条插值或线性插值进行预测
+                this.data.forEach((record, index) => {
+                    if (!record[paramKey] || record[paramKey] <= 0) {
+                        // 这是缺失点，需要预测
+                        const predicted = this.interpolateValue(paramKey, index, realValues);
+                        record[`${paramKey}_predicted`] = predicted ? predicted.value : 0;
+                        record[`${paramKey}_isPredicted`] = predicted ? true : false;
+                        record[`${paramKey}_predictionType`] = predicted ? predicted.type : 'none';
+                        record[`${paramKey}_predictionInfo`] = predicted ? predicted.info : null;
+                    } else {
+                        // 真实测量值
+                        record[`${paramKey}_predicted`] = record[paramKey];
+                        record[`${paramKey}_isPredicted`] = false;
+                    }
+                });
+            }
+
+            // 改进的插值算法
+            interpolateValue(paramKey, targetIndex, realValues = null) {
+                const sparseParams = ['离线PH', '生物量', '酶活/(U/ml)', '氨基氮含量mg/L', '蛋白含量/(g/L)', '甲醇含量/%', '还原糖含量/%', '葡萄糖含量/%'];
+                if (!sparseParams.includes(paramKey)) {
+                    return null;
+                }
+
+                // 如果没有提供realValues，重新获取
+                if (!realValues) {
+                    realValues = [];
+                    this.data.forEach((record, index) => {
+                        const value = record[paramKey];
+                        if (value && value > 0) {
+                            realValues.push({
+                                index: index,
+                                value: value,
+                                time: record.发酵计时 || 0
+                            });
+                        }
+                    });
+                }
+
+                if (realValues.length < 2) {
+                    return null;
+                }
+
+                const targetTime = this.data[targetIndex].发酵计时;
+
+                // 找到目标时间点左右的真实测量点
+                let leftPoint = null;
+                let rightPoint = null;
+
+                for (let i = 0; i < realValues.length; i++) {
+                    if (realValues[i].index <= targetIndex) {
+                        leftPoint = realValues[i];
+                    }
+                    if (realValues[i].index > targetIndex && !rightPoint) {
+                        rightPoint = realValues[i];
+                        break;
+                    }
+                }
+
+                // 如果目标点就是真实测量点，返回null（使用真实值）
+                if (leftPoint && leftPoint.index === targetIndex) {
+                    return null;
+                }
+
+                // 进行改进的插值
+                if (leftPoint && rightPoint) {
+                    // 双边插值 - 使用改进的算法
+                    const timeDiff = rightPoint.time - leftPoint.time;
+                    const targetTimeDiff = targetTime - leftPoint.time;
+                    const ratio = targetTimeDiff / timeDiff;
+                    
+                    // 考虑更多邻近点进行更平滑的插值
+                    let interpolatedValue = leftPoint.value + (rightPoint.value - leftPoint.value) * ratio;
+                    
+                    // 如果有更多数据点，使用加权平均改善插值
+                    const nearbyPoints = realValues.filter(p => 
+                        Math.abs(p.time - targetTime) <= Math.abs(timeDiff) * 1.5
+                    );
+                    
+                    if (nearbyPoints.length > 2) {
+                        // 使用距离加权平均
+                        let weightedSum = 0;
+                        let totalWeight = 0;
+                        
+                        nearbyPoints.forEach(point => {
+                            const distance = Math.abs(point.time - targetTime);
+                            const weight = 1 / (distance + 0.1); // 避免除零
+                            weightedSum += point.value * weight;
+                            totalWeight += weight;
+                        });
+                        
+                        const weightedAverage = weightedSum / totalWeight;
+                        // 混合线性插值和加权平均
+                        interpolatedValue = interpolatedValue * 0.7 + weightedAverage * 0.3;
+                    }
+                    
+                    return {
+                        value: Math.max(0, interpolatedValue), // 确保非负值
+                        type: 'interpolated',
+                        leftPoint: leftPoint,
+                        rightPoint: rightPoint,
+                        info: `基于第${leftPoint.time.toFixed(1)}h-${rightPoint.time.toFixed(1)}h的AI插值预测`
+                    };
+                } else if (leftPoint) {
+                    // 只有左边点，使用趋势外推
+                    let extrapolatedValue = leftPoint.value;
+                    
+                    // 如果有足够的历史数据，计算趋势
+                    if (realValues.length >= 2) {
+                        const recentPoints = realValues.slice(-Math.min(3, realValues.length));
+                        if (recentPoints.length >= 2) {
+                            // 计算平均变化率
+                            let totalChange = 0;
+                            for (let i = 1; i < recentPoints.length; i++) {
+                                const timeDiff = recentPoints[i].time - recentPoints[i-1].time;
+                                const valueDiff = recentPoints[i].value - recentPoints[i-1].value;
+                                totalChange += valueDiff / timeDiff;
+                            }
+                            const avgChangeRate = totalChange / (recentPoints.length - 1);
+                            
+                            // 基于趋势外推
+                            const extrapolationTime = targetTime - leftPoint.time;
+                            extrapolatedValue = leftPoint.value + avgChangeRate * extrapolationTime;
+                        }
+                    }
+                    
+                    return {
+                        value: Math.max(0, extrapolatedValue),
+                        type: 'extrapolated_left',
+                        leftPoint: leftPoint,
+                        info: `基于第${leftPoint.time.toFixed(1)}h的AI趋势外推`
+                    };
+                } else if (rightPoint) {
+                    // 只有右边点，向前外推
+                    let extrapolatedValue = rightPoint.value;
+                    
+                    // 如果有足够的未来数据，计算趋势
+                    if (realValues.length >= 2) {
+                        const futurePoints = realValues.slice(0, Math.min(3, realValues.length));
+                        if (futurePoints.length >= 2) {
+                            // 计算平均变化率
+                            let totalChange = 0;
+                            for (let i = 1; i < futurePoints.length; i++) {
+                                const timeDiff = futurePoints[i].time - futurePoints[i-1].time;
+                                const valueDiff = futurePoints[i].value - futurePoints[i-1].value;
+                                totalChange += valueDiff / timeDiff;
+                            }
+                            const avgChangeRate = totalChange / (futurePoints.length - 1);
+                            
+                            // 基于趋势外推
+                            const extrapolationTime = rightPoint.time - targetTime;
+                            extrapolatedValue = rightPoint.value - avgChangeRate * extrapolationTime;
+                        }
+                    }
+                    
+                    return {
+                        value: Math.max(0, extrapolatedValue),
+                        type: 'extrapolated_right',
+                        rightPoint: rightPoint,
+                        info: `基于第${rightPoint.time.toFixed(1)}h的AI趋势外推`
+                    };
+                }
+
+                return null;
+            }
+
+            showError(message) {
+                const fileInfo = document.getElementById('fileInfo');
+                fileInfo.style.display = 'block';
+                fileInfo.innerHTML = `<div class="error">❌ ${message}</div>`;
+            }
+        }
+
+        // 检查依赖库是否加载成功
+        function checkDependencies() {
+            return new Promise((resolve) => {
+                let retryCount = 0;
+                const maxRetries = 20;
+                
+                function checkLibraries() {
+                    if (typeof Chart === 'undefined') {
+                        if (window.chartJsLoadFailed) {
+                            console.log('Chart.js 加载失败');
+                            showChartLoadError();
+                            resolve(false);
+                            return;
+                        }
+                        
+                        retryCount++;
+                        if (retryCount < maxRetries) {
+                            console.log(`检查Chart.js加载状态... (${retryCount}/${maxRetries})`);
+                            setTimeout(checkLibraries, 500);
+                        } else {
+                            console.log('Chart.js 加载超时');
+                            showChartLoadError();
+                            resolve(false);
+                        }
+                        return;
+                    }
+                    
+                    if (window.zoomPluginLoaded === false && window.chartJsLoaded) {
+                        console.log('Chart.js加载成功，zoom插件加载失败，继续使用基础功能');
+                        resolve(true);
+                        return;
+                    }
+                    
+                    if (window.zoomPluginLoaded) {
+                        console.log('Chart.js和zoom插件都加载成功');
+                        resolve(true);
+                        return;
+                    }
+                    
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                        console.log(`等待插件加载完成... (${retryCount}/${maxRetries})`);
+                        setTimeout(checkLibraries, 500);
+                    } else {
+                        console.log('等待插件加载超时，使用基础功能');
+                        resolve(true);
+                    }
+                }
+                
+                checkLibraries();
+            });
+        }
+        
+        function showChartLoadError() {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = `
+                <h4>⚠️ 在线图表库无法加载</h4>
+                <p><strong>建议解决方案：</strong></p>
+                <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 15px 0;">
+                    <h5 style="color: #856404; margin-bottom: 10px;">🔄 网络连接问题</h5>
+                    <p style="color: #856404; margin-bottom: 10px;">图表库加载失败，请尝试重新加载或检查网络连接：</p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button onclick="retryChartLoad()" 
+                                style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; min-width: 200px;">
+                            🔄 重新尝试加载
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.querySelector('.container').appendChild(errorDiv);
+        }
+
+        // 全选/取消全选功能
+        function selectAllParameters() {
+            const viewer = window.excelViewer;
+            if (viewer) {
+                viewer.parameters.forEach((param, index) => {
+                    param.enabled = true;
+                    const checkbox = document.getElementById(`param_${index}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                viewer.updateCharts();
+            }
+        }
+        
+        function unselectAllParameters() {
+            const viewer = window.excelViewer;
+            if (viewer) {
+                viewer.parameters.forEach((param, index) => {
+                    param.enabled = false;
+                    const checkbox = document.getElementById(`param_${index}`);
+                    if (checkbox) checkbox.checked = false;
+                });
+                viewer.updateCharts();
+            }
+        }
+
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', async () => {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            try {
+                const chartLoaded = await checkDependencies();
+                if (chartLoaded) {
+                    // 设置Chart.js全局字体
+                    if (typeof Chart !== 'undefined') {
+                        Chart.defaults.font.family = '"Times New Roman", "楷体", KaiTi, serif';
+                        Chart.defaults.font.weight = 'bold';
+                    }
+                    
+                    console.log('开始初始化Excel数据查看器...');
+                    window.excelViewer = new ExcelDataViewer();
+                    console.log('Excel数据查看器初始化完成');
+                }
+            } catch (error) {
+                console.error('初始化过程中出现错误:', error);
+                showChartLoadError();
+            } finally {
+                // 隐藏加载指示器
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
